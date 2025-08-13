@@ -1,0 +1,48 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  breakout-system:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./models:/app/models
+      - ./data_cache:/app/data_cache
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+      
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+      
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: breakout_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      
+  celery:
+    build: .
+    command: celery -A tasks worker --loglevel=info
+    depends_on:
+      - redis
+      
+  celery-beat:
+    build: .
+    command: celery -A tasks beat --loglevel=info
+    depends_on:
+      - redis
+
+volumes:
+  postgres_data:
