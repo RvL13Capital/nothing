@@ -1,0 +1,42 @@
+# config.yaml
+system:
+  market_cap_range:
+    min: 10_000_000  # $10M
+    max: 2_000_000_000  # $2B
+  
+  confidence_thresholds:
+    min_signal: 0.60
+    strong_signal: 0.80
+    
+  consolidation:
+    min_days: 10
+    max_days: 120
+    max_range_percent: 20
+    
+  breakout:
+    target_magnitude: 0.40  # 40%
+    window_days: 60
+    
+training:
+  optuna_trials_xgb: 100
+  optuna_trials_lstm: 50
+  validation_split: 0.2
+  early_stopping_patience: 20
+  
+api:
+  host: "0.0.0.0"
+  port: 5000
+  rate_limit: "100/hour"
+  
+monitoring:
+  enable_prometheus: true
+  metrics_port: 9090
+  
+database:
+  url: "postgresql://user:password@localhost/breakout_db"
+  
+paths:
+  models: "./models"
+  data_cache: "./data_cache"
+  logs: "./logs"
+  predictions: "./predictions"
