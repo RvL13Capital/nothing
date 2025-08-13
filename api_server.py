@@ -6,10 +6,31 @@ REST API für das Breakout Detection System
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import asyncio
+import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load configuration
+from config_loader import load_config, validate_required_env_vars, get_database_url, get_redis_url
+
+# Validate environment variables
+validate_required_env_vars()
 
 app = Flask(__name__)
 CORS(app)
+
+# Load application configuration
+config = load_config()
+
+# Configure Flask app from configuration
+app.config['SECRET_KEY'] = config['security']['secret_key']
+app.config['JWT_SECRET_KEY'] = config['security']['jwt_secret_key']
+app.config['FLASK_ENV'] = os.getenv('FLASK_ENV', 'production')
+app.config['DATABASE_URL'] = get_database_url()
+app.config['REDIS_URL'] = get_redis_url()
+
+# Store config for use in the application
+app.config['APP_CONFIG'] = config
 
 # Initialize system
 from breakout_system import BreakoutDetectionSystem

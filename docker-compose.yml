@@ -5,9 +5,19 @@ services:
   breakout-system:
     build: .
     ports:
-      - "5000:5000"
+      - "${WEB_PORT:-5000}:5000"
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - TWELVEDATA_API_KEY=${TWELVEDATA_API_KEY}
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./models:/app/models
       - ./data_cache:/app/data_cache
@@ -15,34 +25,144 @@ services:
     depends_on:
       - redis
       - postgres
+    restart: unless-stopped
       
   redis:
     image: redis:alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c "
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          redis-server --requirepass $$REDIS_PASSWORD
+        else
+          redis-server
+        fi
+      "
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
       
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: breakout_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${POSTGRES_DB:-breakout_db}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
       
   celery:
     build: .
-    command: celery -A tasks worker --loglevel=info
+    command: celery -A tasks worker --loglevel=${LOG_LEVEL:-info} --concurrency=${CELERY_WORKERS:-2}
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - SECRET_KEY=${SECRET_KEY}
+      - TWELVEDATA_API_KEY=${TWELVEDATA_API_KEY}
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./models:/app/models
+      - ./data_cache:/app/data_cache
+      - ./logs:/app/logs
     depends_on:
       - redis
+      - postgres
+    restart: unless-stopped
       
   celery-beat:
     build: .
-    command: celery -A tasks beat --loglevel=info
+    command: celery -A tasks beat --loglevel=${LOG_LEVEL:-info}
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - SECRET_KEY=${SECRET_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       - redis
+      - postgres
+    restart: unless-stopped
+
+  # Enterprise Feature Store Services
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.6
+    ports:
+      - "${CLICKHOUSE_PORT:-8123}:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-feature_store}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./feature_store_schema.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
+    restart: unless-stopped
+    
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    restart: unless-stopped
+    
+  feature-server:
+    build: .
+    command: uvicorn feature_serving:app --host 0.0.0.0 --port 8000 --workers 4
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CLICKHOUSE_HOST=clickhouse
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - FEATURE_STORE_USE_GPU=${FEATURE_STORE_USE_GPU:-false}
+    volumes:
+      - ./models:/app/models
+      - ./data_cache:/app/data_cache
+    depends_on:
+      - redis
+      - postgres
+      - clickhouse
+      - kafka
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+  clickhouse_data:
+  kafka_data:
+  zookeeper_data:

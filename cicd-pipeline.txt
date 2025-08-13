@@ -87,6 +87,7 @@ jobs:
       
       - name: Install dependencies
         run: |
+          # Use consolidated requirements.txt with all dependencies
           pip install -r requirements.txt
           pip install pytest pytest-cov pytest-asyncio pytest-mock
       
@@ -219,38 +220,13 @@ print('Training module test:', test_function())
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
       
-      - name: Create Dockerfile if not exists
+      - name: Validate Dockerfile exists
         run: |
           if [ ! -f Dockerfile ]; then
-            cat > Dockerfile << 'EOF'
-          FROM python:3.11-slim
-          
-          WORKDIR /app
-          
-          # Install system dependencies
-          RUN apt-get update && apt-get install -y \
-              gcc \
-              g++ \
-              build-essential \
-              curl \
-              && rm -rf /var/lib/apt/lists/*
-          
-          # Copy requirements and install Python dependencies
-          COPY requirements.txt .
-          RUN pip install --no-cache-dir -r requirements.txt
-          
-          # Copy application code
-          COPY project/ ./project/
-          COPY *.py ./
-          
-          # Create non-root user
-          RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-          USER appuser
-          
-          # Default command
-          CMD ["python", "-m", "project.server"]
-          EOF
+            echo "ERROR: Dockerfile not found in repository"
+            exit 1
           fi
+          echo "Using committed Dockerfile for build"
       
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

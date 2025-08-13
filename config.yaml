@@ -1,42 +1,80 @@
-# config.yaml
+# config.yaml - Configuration with environment variable support
 system:
   market_cap_range:
-    min: 10_000_000  # $10M
-    max: 2_000_000_000  # $2B
+    min: ${MIN_MARKET_CAP:-300000000}  # $300M
+    max: ${MAX_MARKET_CAP:-2000000000}  # $2B
   
   confidence_thresholds:
     min_signal: 0.60
     strong_signal: 0.80
     
   consolidation:
-    min_days: 10
-    max_days: 120
+    min_days: ${MIN_CONSOLIDATION_DAYS:-10}
+    max_days: ${MAX_CONSOLIDATION_DAYS:-120}
     max_range_percent: 20
     
   breakout:
-    target_magnitude: 0.40  # 40%
-    window_days: 60
+    target_magnitude: ${TARGET_BREAKOUT_MAGNITUDE:-0.40}  # 40%
+    window_days: ${BREAKOUT_WINDOW_DAYS:-60}
     
 training:
-  optuna_trials_xgb: 100
-  optuna_trials_lstm: 50
+  optuna_trials_xgb: ${OPTUNA_N_TRIALS_XGB:-100}
+  optuna_trials_lstm: ${OPTUNA_N_TRIALS_LSTM:-50}
   validation_split: 0.2
   early_stopping_patience: 20
+  max_training_time: ${MAX_TRAINING_TIME:-3600}
   
 api:
   host: "0.0.0.0"
-  port: 5000
-  rate_limit: "100/hour"
+  port: ${WEB_PORT:-5000}
+  rate_limit: ${API_RATE_LIMIT:-"100/hour"}
   
 monitoring:
-  enable_prometheus: true
-  metrics_port: 9090
+  enable_prometheus: ${PROMETHEUS_METRICS_ENABLED:-true}
+  metrics_port: ${PROMETHEUS_PORT:-9090}
   
 database:
-  url: "postgresql://user:password@localhost/breakout_db"
+  url: ${DATABASE_URL}
+  
+# API Keys for market data
+market_data:
+  twelvedata:
+    api_key: ${TWELVEDATA_API_KEY}
+  alphavantage:
+    api_key: ${ALPHAVANTAGE_API_KEY}
+  yfinance:
+    enabled: ${YFINANCE_ENABLED:-true}
+
+# Redis configuration  
+redis:
+  url: ${REDIS_URL}
+  
+# Celery configuration
+celery:
+  broker_url: ${CELERY_BROKER_URL}
+  result_backend: ${CELERY_RESULT_BACKEND}
+  workers: ${CELERY_WORKERS:-2}
   
 paths:
-  models: "./models"
-  data_cache: "./data_cache"
-  logs: "./logs"
-  predictions: "./predictions"
+  models: ${MODELS_PATH:-"./models"}
+  data_cache: ${DATA_CACHE_PATH:-"./data_cache"}
+  logs: ${LOGS_PATH:-"./logs"}
+  predictions: ${PREDICTIONS_PATH:-"./predictions"}
+  
+# Security settings
+security:
+  secret_key: ${SECRET_KEY}
+  jwt_secret_key: ${JWT_SECRET_KEY}
+  encryption_key: ${ENCRYPTION_KEY}
+  
+# Cloud storage (optional)
+cloud:
+  gcs:
+    bucket_name: ${GCS_BUCKET_NAME}
+    project_id: ${GCS_PROJECT_ID}
+    credentials_path: ${GOOGLE_APPLICATION_CREDENTIALS}
+    
+# MLflow tracking (optional)
+mlflow:
+  tracking_uri: ${MLFLOW_TRACKING_URI}
+  experiment_name: ${MLFLOW_EXPERIMENT_NAME:-"BreakoutPrediction"}
